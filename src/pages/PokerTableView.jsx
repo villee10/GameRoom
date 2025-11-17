@@ -27,24 +27,32 @@ export default function PokerTableView() {
   // ⏳ Countdown logik — frontend timer
   // ---------------------------------------------------------
   useEffect(() => {
-    if (localCountdown === null) return;
+  if (localCountdown === null) return;
 
-    if (localCountdown > 0) {
-      const t = setTimeout(() => setLocalCountdown(c => c - 1), 1000);
-      return () => clearTimeout(t);
-    }
+  if (localCountdown > 0) {
+    const t = setTimeout(() => {
+      setLocalCountdown(c => c - 1);
 
-    if (localCountdown === 0) {
-      // Markera spelet som startat i databasen
-      supabase
-        .from("roomstate")
-        .update({ has_started: true })
+      // update DB so all clients see the countdown
+      supabase.from("roomstate")
+        .update({ countdown: localCountdown - 1 })
         .eq("room_id", id);
 
-      // Flytta spelare till spelbordsvyn
-      window.location.href = `/poker/${id}/play`;
-    }
-  }, [localCountdown]);
+    }, 1000);
+
+    return () => clearTimeout(t);
+  }
+
+  if (localCountdown === 0) {
+    // mark game as started
+    supabase.from("roomstate")
+      .update({ has_started: true })
+      .eq("room_id", id);
+
+    window.location.href = `/poker/${id}/play`;
+  }
+}, [localCountdown]);
+
 
   // ---------------------------------------------------------
   // 🔄 Hämta spelare
@@ -65,14 +73,23 @@ export default function PokerTableView() {
     if (game?.has_started) return;
 
     // Är alla redo?
-    const allReady = data.length > 1 && data.every(p => p.is_ready);
+    const allReady = data.every(p => p.is_ready);
 
-    // Starta countdown ENDAST om:
-    // - alla är redo
-    // - spelet inte startat
-    // - countdown inte redan pågår
-    if (allReady && !game?.has_started && localCountdown == null) {
-      setLocalCountdown(3);
+if (allReady && !game?.has_started && localCountdown == null) {
+  // Save countdown in DB
+  await supabase
+    .from("roomstate")
+    .update({ countdown: 3 })
+    .eq("room_id", id);
+
+  setLocalCountdown(3);
+}
+    else if (!allReady && localCountdown !== null) {
+      // Någon inte redo — avbryt nedräkningen
+      await supabase
+        .from("roomstate")
+        .update({ countdown: null })
+        .eq("room_id", id);
     }
   }
 
@@ -80,15 +97,20 @@ export default function PokerTableView() {
   // 🔄 Hämta spelstatus
   // ---------------------------------------------------------
   async function loadGame() {
-    const { data } = await supabase
-      .from("roomstate")
-      .select("*")
-      .eq("room_id", id)
-      .single();
+  const { data } = await supabase
+    .from("roomstate")
+    .select("*")
+    .eq("room_id", id)
+    .single();
 
-    setGame(data);
-    
+  setGame(data);
+
+  // NEW: Sync local countdown with database
+  if (data?.countdown !== null && localCountdown === null) {
+    setLocalCountdown(data.countdown);
   }
+}
+
 
   // ---------------------------------------------------------
   // 🔘 Toggle redo-status
