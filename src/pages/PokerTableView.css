@@ -1,0 +1,361 @@
+/* Main page container - 100vw x 100vh with no overflow */
+.poker-table-page {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  box-sizing: border-box;
+  padding: 20px;
+  gap: 20px;
+}
+
+
+
+/* Header section */
+.poker-header {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  transform-origin: top center;
+  position: relative;
+  width: 100%;
+}
+
+.poker-table-page h2 {
+  font-size: clamp(20px, 4vw, 28px);
+  margin: 0;
+}
+
+.back-link {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-size: clamp(12px, 3vw, 14px);
+  color: #4ade80;
+  text-decoration: none;
+  transform-origin: top center;
+}
+
+.back-link:hover {
+  text-decoration: underline;
+}
+
+/* Scale down header (including back-link) when viewport is too small - same as table */
+@media (max-height: 700px) {
+  .poker-header {
+    transform: scale(0.85);
+  }
+}
+
+@media (max-height: 600px) {
+  .poker-header {
+    transform: scale(0.75);
+  }
+}
+
+@media (max-height: 500px) {
+  .poker-header {
+    transform: scale(0.65);
+  }
+}
+
+@media (max-width: 900px) {
+  .poker-header {
+    transform: scale(0.85);
+  }
+}
+
+@media (max-width: 750px) {
+  .poker-header {
+    transform: scale(0.72);
+  }
+}
+
+@media (max-width: 650px) {
+  .poker-header {
+    transform: scale(0.60);
+  }
+}
+
+@media (max-width: 550px) {
+  .poker-header {
+    transform: scale(0.50);
+  }
+}
+
+/* Table container with aspect ratio wrapper */
+.table-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  max-width: 100vw;
+  max-height: 60vh; /* Reserve space for cards below */
+}
+
+/* Fixed aspect ratio wrapper */
+.table-wrapper {
+  width: min(780px, 90vw);
+  aspect-ratio: 780 / 430;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transform-origin: top center;
+}
+
+/* Scale down when viewport is too small */
+@media (max-height: 700px) {
+  .table-wrapper{
+    transform: scale(0.85);
+  }
+}
+
+@media (max-height: 600px) {
+  .table-wrapper{
+    transform: scale(0.75);
+  }
+}
+
+@media (max-height: 500px) {
+  .table-wrapper{
+    transform: scale(0.65);
+  }
+}
+
+@media (max-width: 900px) {
+  .table-wrapper{
+    transform: scale(0.85);
+  }
+}
+
+@media (max-width: 750px) {
+  .table-wrapper{
+    transform: scale(0.72);
+  }
+}
+
+@media (max-width: 650px) {
+  .table-wrapper{
+    transform: scale(0.60);
+  }
+}
+
+@media (max-width: 550px) {
+  .table-wrapper{
+    transform: scale(0.50);
+  }
+}
+
+/* The actual poker table */
+.table-area {
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at center, #0a5c3b, #063422 75%);
+  border-radius: 50%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 60px rgba(0, 0, 0, 0.6);
+}
+
+/* Seat positions around the table */
+.seat-box {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  min-width: 110px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+/* Occupied seat styling */
+.seat-box.taken {
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+/* Empty seat styling */
+.seat-box.empty-seat {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  color: rgba(249, 250, 251, 0.6);
+  font-style: italic;
+}
+
+.player-name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.player-name::before {
+  content: "●";
+  font-size: 10px;
+  color: #4ade80;
+}
+
+/* Community cards in the center */
+.community-cards {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  z-index: 5;
+  width: auto;
+}
+
+/* Card styling */
+.card {
+  width: 60px;
+  height: 88px;
+  background: #ffffff;
+  border-radius: 8px;
+  border: 2px solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 16px;
+  color: #111827;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
+}
+
+/* Empty card styling */
+.card.empty {
+  background: transparent;
+  border-style: dashed;
+  border-color: rgba(229, 231, 235, 0.4);
+  box-shadow: none;
+}
+
+/* Player's hand section */
+.my-hand {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-top: auto;
+  padding-bottom: 20px;
+}
+
+.my-hand h3 {
+  margin: 0;
+  font-size: clamp(16px, 3vw, 18px);
+}
+
+.card-row {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+  .poker-table-page {
+    padding: 10px;
+    gap: 10px;
+  }
+  
+  .seat-box {
+    min-width: 90px;
+    font-size: 12px;
+    padding: 4px 8px;
+  }
+  
+  .card {
+    width: 48px;
+    height: 72px;
+    font-size: 14px;
+  }
+  
+  .community-cards {
+    gap: 8px;
+  }
+  
+  .card-row {
+    gap: 8px;
+  }
+}
+
+@media (max-width: 400px) {
+  .card {
+    width: 40px;
+    height: 60px;
+    font-size: 12px;
+  }
+  
+  .community-cards {
+    gap: 6px;
+  }
+  
+  .card-row {
+    gap: 6px;
+  }
+}
+
+
+
+.countdown-box {
+  position: absolute;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.7);
+  padding: 20px 40px;
+  border-radius: 12px;
+  color: white;
+  font-size: 48px;
+  font-weight: bold;
+  z-index: 9999;
+}
+
+
+
+@keyframes pop {
+  0% { transform: translateX(-50%) scale(0.6); opacity: 0; }
+  100% { transform: translateX(-50%) scale(1); opacity: 1; }
+}
+
+
+
+.countdown-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0,0,0,0.65);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 999;
+}
+
+.countdown-overlay h1 {
+  font-size: 120px;
+  font-weight: 900;
+  color: white;
+}
+
+
+
+
