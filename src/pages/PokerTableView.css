@@ -359,3 +359,10 @@
 
 
 
+.room-id {
+  position: absolute;
+  right: 0;
+  top: 0;
+  color: white;
+  font-size: 14px;
+}

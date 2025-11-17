@@ -142,3 +142,41 @@ a:hover {
   border-radius: 8px;
   border: 2px solid #333;
 }
+
+.player-list {
+  list-style: none;
+  padding: 0;
+  margin: 10px auto;
+  width: 220px;            /* lagom bredd */
+  padding-left: 40px;
+}
+
+.player-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+}
+
+.player-name {
+  font-size: 16px;
+  color: white;
+  padding-left: 70px;
+}
+
+.remove-player-btn {
+  background: #c62828;
+  border: none;
+  color: white;
+  padding: 2px 8px;
+  font-size: 16px;
+  line-height: 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.remove-player-btn:hover {
+  background: #e53935;
+}
+

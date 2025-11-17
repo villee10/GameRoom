@@ -136,28 +136,20 @@ async function ensureRoomState() {
 
       <h3>Spelare i rummet:</h3>
 
-      <ul>
-        {players.map(p => (
-          <li key={p.id} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            {p.name}
-            {p.is_connected ? "🟢" : "🔴"}
+     
+     <ul className="player-list">
+  {players.map(p => (
+    <li className="player-item" key={p.id}>
+      <span className="player-name">{p.name}</span>
+      <button
+        className="remove-player-btn"
+        onClick={() => removePlayer(p.id)}
+      >-</button>
+    </li>
+  ))}
+</ul>
 
-            <button
-              onClick={() => removePlayer(p.id)}
-              style={{
-                background: "#b00000",
-                border: "none",
-                color: "white",
-                padding: "2px 6px",
-                borderRadius: "4px",
-                cursor: "pointer"
-              }}
-            >
-              X
-            </button>
-          </li>
-        ))}
-      </ul>
+
 
       <button onClick={startGame} className="start-game-btn">
         Starta spel

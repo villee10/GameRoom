@@ -168,6 +168,8 @@ if (allReady && !game?.has_started && localCountdown == null) {
   return (
     <div className="poker-table-page">
       <div className="poker-header">
+        <span className="room-id">Rum-ID: {id}</span>
+
         <h2>♠️ Pokerbord</h2>
         <Link to={`/poker/${id}`} className="back-link">Tillbaka</Link>
       </div>
