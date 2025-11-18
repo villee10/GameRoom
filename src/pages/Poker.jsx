@@ -9,27 +9,54 @@ export default function Poker() {
   );
 
   async function createRoom() {
-    const trimmed = playerName.trim();
-    if (!trimmed) return alert("Skriv in ditt namn!");
+  const trimmed = playerName.trim();
+  if (!trimmed) return alert("Skriv in ditt namn!");
 
-    localStorage.setItem("playerName", trimmed);
+  localStorage.setItem("playerName", trimmed);
 
-    const roomId = Math.random().toString(36).substring(2, 8);
+  const roomId = Math.random().toString(36).substring(2, 8);
 
-    const { error } = await supabase.from("rooms").insert([
+  // 1️⃣ Skapa spelaren i roomplayers
+  const { data: player, error: playerError } = await supabase
+    .from("roomplayers")
+    .insert([
+      {
+        room_id: roomId,
+        name: trimmed,
+        is_connected: true,
+        is_ready: false,
+      },
+    ])
+    .select()
+    .single();
+
+  if (playerError) {
+    console.error(playerError);
+    return alert("Kunde inte skapa spelaren.");
+  }
+
+  // Spara playerId i localStorage
+  localStorage.setItem("playerId", player.id);
+
+  // 2️⃣ Skapa rummet med owner_id = player.id
+  const { error: roomError } = await supabase
+    .from("rooms")
+    .insert([
       {
         id: roomId,
-        owner_id: null,
+        owner_id: player.id,
       },
     ]);
 
-    if (error) {
-      console.error(error);
-      return alert("Kunde inte skapa rum.");
-    }
-
-    window.location.href = `/poker/${roomId}`;
+  if (roomError) {
+    console.error(roomError);
+    return alert("Kunde inte skapa rummet.");
   }
+
+  // 3️⃣ Navigera in i rummet
+  window.location.href = `/poker/${roomId}`;
+}
+
 
   async function joinRoom() {
     const trimmed = playerName.trim();
