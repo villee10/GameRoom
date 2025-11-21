@@ -1,79 +1,67 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import supabase from "../supabaseClient";
 import "./Poker.css";
 
 export default function Poker() {
-  const [playerName, setPlayerName] = useState(
-    localStorage.getItem("playerName") || ""
-  );
+  const [profile, setProfile] = useState(null);
+
+  useEffect(() => {
+    async function loadProfile() {
+      const { data: session } = await supabase.auth.getSession();
+      if (!session.session) return;
+
+      const userId = session.session.user.id;
+
+      const { data } = await supabase
+        .from("profiles")
+        .select("username")
+        .eq("id", userId)
+        .single();
+
+      if (data) setProfile(data);
+    }
+
+    loadProfile();
+  }, []);
 
   async function createRoom() {
-  const trimmed = playerName.trim();
-  if (!trimmed) return alert("Skriv in ditt namn!");
+    if (!profile) return alert("Profil saknas?");
 
-  localStorage.setItem("playerName", trimmed);
+    // Hämta inloggad användare
+    const session = await supabase.auth.getSession();
+    const userId = session.data.session.user.id;
 
-  const roomId = Math.random().toString(36).substring(2, 8);
+    const roomId = Math.random().toString(36).substring(2, 8);
 
-  // 1️⃣ Skapa spelaren i roomplayers
-  const { data: player, error: playerError } = await supabase
-    .from("roomplayers")
-    .insert([
-      {
-        room_id: roomId,
-        name: trimmed,
-        is_connected: true,
-        is_ready: false,
-      },
-    ])
-    .select()
-    .single();
+    // Skapa rummet (INGA roomplayers här!)
+    const { error } = await supabase
+      .from("rooms")
+      .insert([{ id: roomId, owner_id: userId }]);
 
-  if (playerError) {
-    console.error(playerError);
-    return alert("Kunde inte skapa spelaren.");
+    if (error) {
+      console.error(error);
+      alert("Kunde inte skapa rum");
+      return;
+    }
+
+    // Gå till rummet
+    window.location.href = `/poker/${roomId}`;
   }
-
-  // Spara playerId i localStorage
-  localStorage.setItem("playerId", player.id);
-
-  // 2️⃣ Skapa rummet med owner_id = player.id
-  const { error: roomError } = await supabase
-    .from("rooms")
-    .insert([
-      {
-        id: roomId,
-        owner_id: player.id,
-      },
-    ]);
-
-  if (roomError) {
-    console.error(roomError);
-    return alert("Kunde inte skapa rummet.");
-  }
-
-  // 3️⃣ Navigera in i rummet
-  window.location.href = `/poker/${roomId}`;
-}
-
 
   async function joinRoom() {
-    const trimmed = playerName.trim();
-    if (!trimmed) return alert("Skriv in ditt namn!");
-
-    localStorage.setItem("playerName", trimmed);
+    if (!profile) return alert("Profil saknas?");
 
     const roomId = prompt("Ange rum-ID:");
     if (!roomId) return;
 
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("rooms")
       .select("id")
       .eq("id", roomId)
       .single();
 
-    if (error || !data) return alert("Rummet finns inte!");
+    if (!data) return alert("Rummet finns inte!");
 
     window.location.href = `/poker/${roomId}`;
   }
@@ -82,12 +70,9 @@ export default function Poker() {
     <div className="poker-page">
       <h2 className="header">♠️ Poker</h2>
 
-      <input
-        className="name-input"
-        placeholder="Ditt namn"
-        value={playerName}
-        onChange={(e) => setPlayerName(e.target.value)}
-      />
+      <p style={{ marginBottom: "20px", opacity: 0.7 }}>
+        Inloggad som: <strong>{profile?.username}</strong>
+      </p>
 
       <div className="poker-buttons">
         <button onClick={createRoom}>Skapa rum</button>
