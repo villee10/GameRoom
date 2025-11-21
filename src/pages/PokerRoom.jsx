@@ -170,6 +170,12 @@ export default function PokerRoom() {
   // ---------------------------------------------------------
   // UI
   // ---------------------------------------------------------
+  // If no players are returned yet, show the current profile as a fallback
+  const playersToShow = (players && players.length > 0)
+    ? players
+    : profile && profile.username
+      ? [{ id: userId || "me", name: profile.username }]
+      : [];
   return (
     <div className="poker-page">
       <div className="player-info">
@@ -184,7 +190,7 @@ export default function PokerRoom() {
       <h3>Spelare i rummet:</h3>
 
       <ul className="player-list">
-        {players.map((p) => (
+        {playersToShow.map((p) => (
           <li key={p.id} className="player-item">
             <span className="player-name">
               {p.name}

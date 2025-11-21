@@ -181,10 +181,13 @@ a:hover {
 }
 
 .player-info {
-  position: absolute;
-  top: 20px;
-  left: 20px;
+  position: fixed; /* place under the top navigation */
+  top: 96px; /* push further below the fixed header so it doesn't overlap */
+  left: 25px; /* align with header padding */
   color: white;
   font-size: 18px;
-  opacity: 0.85;
+  opacity: 0.95;
+  z-index: 15;
+  background: transparent;
+  padding: 2px 6px;
 }

@@ -50,9 +50,9 @@ export default function Layout({ children }) {
     <>
       <div style={{
         width: "100%",
-        padding: "15px 25px",
+        padding: "15px 12px 15px 25px",
         display: "flex",
-        justifyContent: "space-between",
+        justifyContent: "flex-start",
         alignItems: "center",
         background: "rgba(0,0,0,0.4)",
         color: "white",
@@ -62,14 +62,15 @@ export default function Layout({ children }) {
         left: 0,
         zIndex: 20
       }}>
-        <Link to="/" style={{ color: "white", textDecoration: "none" }}>
-          Home
-        </Link>
+        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+          <Link to="/" style={{ color: "white", textDecoration: "none" }}>
+            Home
+          </Link>
+        </div>
 
-        {/* LOGIN-KNAPP / USERNAME */}
+        {/* Place logout a bit in from the right edge */}
         {profile ? (
-          <div style={{ display: "flex", gap: "15px", alignItems: "center" }}>
-            <span>{profile.username}</span>
+          <div style={{ display: "flex", alignItems: "center", marginLeft: "auto", marginRight: "80px" }}>
             <button 
               onClick={logout}
               style={{
@@ -84,7 +85,7 @@ export default function Layout({ children }) {
             </button>
           </div>
         ) : (
-          <Link to="/login" style={{ color: "white" }}>
+          <Link to="/login" style={{ color: "white", marginLeft: "auto", marginRight: "80px" }}>
             Logga in
           </Link>
         )}
