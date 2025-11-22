@@ -4,7 +4,6 @@ import supabase from "../supabaseClient";
 import "./PokerTableView.css";
 import { createDeck, shuffle, dealHands } from "./Game/pokerLogic";
 
-// Positioner runt bordet
 const seatPositions = [
   { top: "70%", left: "50%" },
   { top: "60%", left: "75%" },
@@ -23,34 +22,52 @@ export default function PokerTableView() {
   const [game, setGame] = useState(null);
   const [currentPlayer, setCurrentPlayer] = useState(null);
   const [localCountdown, setLocalCountdown] = useState(null);
+  const [userId, setUserId] = useState(null);
+  const [ownerId, setOwnerId] = useState(null);
+  const [isOwner, setIsOwner] = useState(false);
+
+  // ---------------------------------------------------------
+  // 🔐 Hämta inloggad användare
+  // ---------------------------------------------------------
+  useEffect(() => {
+    async function getSession() {
+      const { data } = await supabase.auth.getSession();
+      const uid = data?.session?.user?.id;
+      setUserId(uid);
+    }
+    getSession();
+  }, []);
+
+  useEffect(() => {
+    setIsOwner(ownerId && userId ? String(ownerId) === String(userId) : false);
+  }, [ownerId, userId]);
 
   // ---------------------------------------------------------
   // ⏳ Countdown logik
   // ---------------------------------------------------------
   useEffect(() => {
+    if (!game || game.has_started) return;
     if (localCountdown === null) return;
 
     if (localCountdown > 0) {
       const t = setTimeout(() => {
-        setLocalCountdown(c => c - 1);
+        const next = localCountdown - 1;
+        setLocalCountdown(next);
 
-        supabase.from("roomstate")
-          .update({ countdown: localCountdown - 1 })
+        supabase
+          .from("roomstate")
+          .update({ countdown: next })
           .eq("room_id", id);
-
       }, 1000);
 
       return () => clearTimeout(t);
     }
 
-    // När countdown når 0 → starta spelet
     if (localCountdown === 0) startGame();
-
-  }, [localCountdown]);
-
+  }, [localCountdown, game]);
 
   // ---------------------------------------------------------
-  // 🎮 Starta spelet (deal cards + mark has_started)
+  // 🎮 Starta spelet – dealer
   // ---------------------------------------------------------
   async function startGame() {
     const { data: playersInRoom } = await supabase
@@ -59,26 +76,22 @@ export default function PokerTableView() {
       .eq("room_id", id)
       .order("seat", { ascending: true });
 
-    // skapa kortlek och dela ut
     let deck = shuffle(createDeck());
-    const { hands, remaining } = dealHands(deck, playersInRoom);
+    const { hands } = dealHands(deck, playersInRoom);
 
     await supabase
       .from("roomstate")
       .update({
         has_started: true,
         countdown: null,
-        hands: hands,
+        hands,
         community_cards: [],
       })
       .eq("room_id", id);
-
-    window.location.href = `/poker/${id}/play`;
   }
 
-
   // ---------------------------------------------------------
-  // 🔄 Hämta spelare
+  // 🔄 Ladda spelare
   // ---------------------------------------------------------
   async function loadPlayers() {
     const { data } = await supabase
@@ -86,90 +99,161 @@ export default function PokerTableView() {
       .select("*")
       .eq("room_id", id)
       .order("seat", { ascending: true });
+    console.log(
+      `[loadPlayers] ${new Date().toISOString()} - fetched ${(
+        data || []
+      ).length} players for room ${id}`
+    );
 
     setPlayers(data || []);
 
-    const myId = localStorage.getItem("playerId");
-    if (myId) setCurrentPlayer(data.find(p => p.id === myId));
-
-    if (game?.has_started) return;
-
-    const allReady = data.every(p => p.is_ready);
-    if (allReady && localCountdown === null && game?.countdown == null) {
-      await supabase
-        .from("roomstate")
-        .update({ countdown: 3 })
-        .eq("room_id", id);
-
-      setLocalCountdown(3);
+    if (userId) {
+      setCurrentPlayer(data?.find((p) => p.id === userId) || null);
     }
 
-    if (!allReady && localCountdown !== null) {
-      await supabase
-        .from("roomstate")
-        .update({ countdown: null })
-        .eq("room_id", id);
+    if (game?.has_started || !data) return;
 
-      setLocalCountdown(null);
+    // Require at least 2 players before starting countdown
+    const allReady = data.length > 1 && data.every((p) => p.is_ready === true);
+
+    // När alla spelare är redo (minst 2) → starta nedräkning, men bara om
+    // den lokala spelaren också har tryckt "Starta spel". Detta förhindrar
+    // att en nedräkning startar för klienter som inte själva bekräftat redo.
+    if (
+      allReady &&
+      localCountdown === null &&
+      game?.countdown === null &&
+      currentPlayer?.is_ready === true
+    ) {
+      console.log(
+        "[loadPlayers] all players ready and local player is ready -> trigger countdown start -> 3"
+      );
+      try {
+        await supabase
+          .from("roomstate")
+          .update({ countdown: 3 })
+          .eq("room_id", id);
+      } catch (err) {
+        console.warn("[loadPlayers] countdown update warning:", err);
+      }
+
+      setLocalCountdown(3);
+    } else if (allReady && currentPlayer?.is_ready !== true) {
+      console.log(
+        "[loadPlayers] all players are ready but local player hasn't clicked yet; waiting for local click"
+      );
     }
   }
 
-
   // ---------------------------------------------------------
-  // 🔄 Hämta spelstatus
+  // 🔄 Ladda roomstate
   // ---------------------------------------------------------
   async function loadGame() {
     const { data } = await supabase
       .from("roomstate")
       .select("*")
       .eq("room_id", id)
-      .single();
+      .maybeSingle();
+    console.log(
+      `[loadGame] ${new Date().toISOString()} - roomstate fetched for ${id}:`,
+      data
+    );
+
+    if (!data) {
+      setGame(null);
+      setLocalCountdown(null);
+      return;
+    }
 
     setGame(data);
 
-    if (data?.countdown !== null && localCountdown === null) {
-      setLocalCountdown(data.countdown);
+    if (data.countdown !== null && localCountdown === null) {
+      // Only sync countdown locally if the local player is marked ready.
+      const localIsReady =
+        currentPlayer?.is_ready ||
+        players.find((p) => String(p.id) === String(userId))?.is_ready;
+
+      if (localIsReady) {
+        console.log(
+          `[loadGame] syncing localCountdown -> ${data.countdown} (local player ready)`
+        );
+        setLocalCountdown(data.countdown);
+      } else {
+        console.log(
+          `[loadGame] ignoring countdown=${data.countdown} because local player is not ready yet`
+        );
+      }
     }
   }
 
-
   // ---------------------------------------------------------
-  // 🔘 Toggle redo
+  // 🔘 Ready-knapp
   // ---------------------------------------------------------
+  // Toggle ready/unready for current player
   async function toggleReady() {
     if (!currentPlayer) return;
 
+    const newReady = !currentPlayer.is_ready;
+
+    console.log(
+      `[toggleReady] ${new Date().toISOString()} - setting is_ready=${newReady} for ${currentPlayer.id}`
+    );
+
     await supabase
       .from("roomplayers")
-      .update({ is_ready: !currentPlayer.is_ready })
+      .update({ is_ready: newReady })
+      .eq("room_id", id)
       .eq("id", currentPlayer.id);
 
+    // reload players to trigger countdown logic
     loadPlayers();
   }
 
-
   // ---------------------------------------------------------
-  // 🔁 Realtid
+  // 📡 Realtid: roomplayers + roomstate
   // ---------------------------------------------------------
   useEffect(() => {
     loadPlayers();
     loadGame();
+    // load owner info so only owner triggers countdown
+    (async function loadOwner() {
+      const { data } = await supabase
+        .from("rooms")
+        .select("owner_id")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (data) {
+        setOwnerId(data.owner_id);
+      }
+    })();
 
     const channel = supabase
-      .channel(`room_${id}_updates`)
-      .on("postgres_changes",
-        { event: "*", schema: "public", table: "roomplayers", filter: `room_id=eq.${id}` },
+      .channel(`room_${id}_realtime`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "roomplayers",
+          filter: `room_id=eq.${id}`,
+        },
         loadPlayers
       )
-      .on("postgres_changes",
-        { event: "*", schema: "public", table: "roomstate", filter: `room_id=eq.${id}` },
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "roomstate",
+          filter: `room_id=eq.${id}`,
+        },
         loadGame
       )
       .subscribe();
 
     return () => supabase.removeChannel(channel);
-  }, []);
-
+  }, [userId]);
 
   // ---------------------------------------------------------
   // UI
@@ -179,13 +263,15 @@ export default function PokerTableView() {
       <div className="poker-header">
         <span className="room-id">Rum-ID: {id}</span>
         <h2>♠️ Pokerbord</h2>
-        <Link to={`/poker/${id}`} className="back-link">Tillbaka</Link>
+        <Link to={`/poker/${id}`} className="back-link">
+          Tillbaka
+        </Link>
       </div>
 
       {/* COUNTDOWN */}
       {localCountdown !== null && !game?.has_started && (
         <div className="countdown-box">
-          {localCountdown > 0 ? <h1>{localCountdown}</h1> : <h1>Startar!</h1>}
+          <h1>{localCountdown > 0 ? localCountdown : "Startar!"}</h1>
         </div>
       )}
 
@@ -193,17 +279,18 @@ export default function PokerTableView() {
       <div className="table-container">
         <div className="table-wrapper">
           <div className="table-area">
-
             {/* COMMUNITY CARDS */}
             {game && (
               <div className="community-cards">
-                {game.community_cards.map((c, i) =>
-                  <div className="card" key={i}>{c}</div>
-                )}
+                {game.community_cards?.map((c, i) => (
+                  <div className="card" key={i}>
+                    {c}
+                  </div>
+                ))}
               </div>
             )}
 
-            {/* STOLAR */}
+            {/* SEATS */}
             {seatPositions.map((pos, i) => {
               const p = players[i];
               return (
@@ -212,22 +299,22 @@ export default function PokerTableView() {
                   className={`seat-box ${p ? "taken" : "empty-seat"}`}
                   style={{ top: pos.top, left: pos.left }}
                 >
-                  {p ? `${p.name} ${p.is_ready ? "✔️" : "⏳"}` : "Tom stol"}
+                  {p
+                    ? `${p.name} ${p.is_ready ? "✔️" : "⏳"}`
+                    : "Tom stol"}
                 </div>
               );
             })}
-
           </div>
         </div>
       </div>
 
-      {/* READY-KNAPP */}
+      {/* READY BUTTON */}
       {currentPlayer && !game?.has_started && (
         <button className="ready-btn" onClick={toggleReady}>
-          {currentPlayer.is_ready ? "Redo ✔️" : "Jag är redo"}
+          {currentPlayer.is_ready ? "Redo ✔️" : "Starta spel"}
         </button>
       )}
-
     </div>
   );
 }

@@ -1,95 +1,166 @@
-import { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import supabase from "../supabaseClient";
 import "./Poker.css";
 import "./PokerRoom.css";
 
 export default function PokerRoom() {
   const { id } = useParams();
+  const navigate = useNavigate();
 
   const [players, setPlayers] = useState([]);
   const [ownerId, setOwnerId] = useState(null);
   const [isOwner, setIsOwner] = useState(false);
+
   const [profile, setProfile] = useState(null);
   const [userId, setUserId] = useState(null);
 
-  // ---------------------------------------------------------
-  // 🔐 Hämta inloggad användare + profil
-  // ---------------------------------------------------------
-  async function loadProfile() {
-    const { data: session } = await supabase.auth.getSession();
-    if (!session.session) return;
+  // Spärrar så att React StrictMode inte skapar dubbla inserts
+  const playerCreatedRef = useRef(false);
+  const roomstateCreatedRef = useRef(false);
 
-    const uid = session.session.user.id;
-    setUserId(uid);
+  // ---------------------------------------------------------
+  // 🔐 Hämta session + profil
+  // ---------------------------------------------------------
+  useEffect(() => {
+    async function loadProfile() {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const session = sessionData?.session;
+
+      if (!session) return;
+
+      const uid = session.user.id;
+      setUserId(uid);
+
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("username")
+        .eq("id", uid)
+        .single();
+
+      if (profileData) setProfile(profileData);
+    }
+
+    loadProfile();
+  }, []);
+
+  // ---------------------------------------------------------
+  // 🟢 Skapa roomstate om den saknas (med anti-dubbel-insert)
+  // ---------------------------------------------------------
+  async function createRoomStateIfMissing() {
+    if (roomstateCreatedRef.current) return; // skydd
+    roomstateCreatedRef.current = true;
 
     const { data } = await supabase
-      .from("profiles")
-      .select("username")
-      .eq("id", uid)
-      .single();
+      .from("roomstate")
+      .select("*")
+      .eq("room_id", id)
+      .maybeSingle();
 
-    if (data) setProfile(data);
+    if (!data) {
+      console.log("Roomstate saknas → Skapar ny...");
+
+        // Använd upsert för att göra operationen idempotent vid dubbel-render
+        const { error } = await supabase
+          .from("roomstate")
+          .upsert(
+            [
+              {
+                room_id: id,
+                community_cards: [],
+                has_started: false,
+                countdown: null,
+                hands: {},
+              },
+            ],
+            { onConflict: "room_id" }
+          )
+          .select();
+
+        if (error) {
+          console.log("Roomstate upsert error (ignored if conflict):", error);
+        }
+    }
   }
 
   // ---------------------------------------------------------
-  // 🟢 Se till att spelaren finns i roomplayers
+  // 🟢 Lägg till spelare EN gång (med anti-dubbel-insert)
   // ---------------------------------------------------------
   async function ensurePlayerExists(username) {
-  if (!userId || !username) return;
+    if (playerCreatedRef.current) return;
+    if (!userId || !username) return;
 
-  // 1. Kontrollera om spelaren redan finns i roomet
-  const { data: existing, error } = await supabase
-    .from("roomplayers")
-    .select("id")
-    .eq("room_id", id)
-    .eq("id", userId)
-    .maybeSingle();
+    // Finns spelaren redan?
+    const { data: existing } = await supabase
+      .from("roomplayers")
+      .select("id")
+      .eq("room_id", id)
+      .eq("id", userId)
+      .maybeSingle();
 
-  // 2. Om spelaren redan finns – gör INGENTING
-  if (existing) {
-    console.log("Player already in room, skip insert.");
-    return;
+    if (existing) {
+      console.log("Player already exists → skip insert.");
+      playerCreatedRef.current = true;
+      return;
+    }
+
+    // Hämta använda seats
+    const { data: others } = await supabase
+      .from("roomplayers")
+      .select("seat")
+      .eq("room_id", id);
+
+    const usedSeats = (others || [])
+      .map((p) => p.seat)
+      .filter((s) => s !== null);
+
+    let seat = 0;
+    while (usedSeats.includes(seat)) seat++;
+
+    // Skapa spelaren
+    // Upsert så att en parallell insert inte ger HTTP 409 / unikhetsfel.
+    const { data: upserted, error } = await supabase
+      .from("roomplayers")
+      .upsert(
+        [
+          {
+            room_id: id,
+            id: userId,
+            name: username,
+            seat,
+            is_ready: false,
+            is_connected: true,
+          },
+        ],
+        { onConflict: "id" }
+      )
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.error("Upsert player error:", error);
+    } else {
+      console.log("Player upserted in room", upserted);
+    }
+
+    playerCreatedRef.current = true;
   }
-
-  // 3. Skapa spelaren EN gång
-  const { error: insertError } = await supabase
-    .from("roomplayers")
-    .insert({
-      room_id: id,
-      id: userId,      // supabase auth user id
-      name: username,  // login-namnet (ville)
-      is_connected: true,
-      is_ready: false,
-    });
-
-  if (insertError) {
-    console.error("Insert player error:", insertError);
-  } else {
-    console.log("Player inserted correctly");
-  }
-}
-
-
-
-
-
 
   // ---------------------------------------------------------
-  // 🔄 Hämta spelare
+  // 🔄 Ladda spelare
   // ---------------------------------------------------------
   async function loadPlayers() {
     const { data } = await supabase
       .from("roomplayers")
       .select("*")
       .eq("room_id", id)
-      .order("created_at", { ascending: true });
+      .order("seat", { ascending: true });
 
     setPlayers(data || []);
   }
 
   // ---------------------------------------------------------
-  // 👑 Hämta owner
+  // 👑 Ladda owner
   // ---------------------------------------------------------
   async function loadOwner() {
     const { data } = await supabase
@@ -109,7 +180,7 @@ export default function PokerRoom() {
   // ---------------------------------------------------------
   async function leaveRoom() {
     await supabase.from("roomplayers").delete().eq("id", userId);
-    window.location.href = "/poker";
+    navigate("/poker");
   }
 
   // ---------------------------------------------------------
@@ -124,25 +195,28 @@ export default function PokerRoom() {
   // INIT
   // ---------------------------------------------------------
   useEffect(() => {
-    loadProfile();
-  }, []);
-
-  useEffect(() => {
     if (profile?.username && userId) {
       ensurePlayerExists(profile.username);
+      createRoomStateIfMissing();
       loadPlayers();
       loadOwner();
     }
   }, [profile, userId]);
 
   // ---------------------------------------------------------
-  // Realtid
+  // 📡 Realtid
   // ---------------------------------------------------------
   useEffect(() => {
     const channel = supabase
-      .channel(`room_${id}`)
-      .on("postgres_changes",
-        { event: "*", schema: "public", table: "roomplayers", filter: `room_id=eq.${id}` },
+      .channel(`room_${id}_players`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "roomplayers",
+          filter: `room_id=eq.${id}`,
+        },
         loadPlayers
       )
       .subscribe();
@@ -151,46 +225,66 @@ export default function PokerRoom() {
   }, []);
 
   // ---------------------------------------------------------
-  // Starta spelet
+  // ▶️ Starta spelet (ingen countdown här)
   // ---------------------------------------------------------
-  async function startGame() {
-    const { error } = await supabase
-      .from("roomstate")
-      .update({
-        has_started: true,
-        countdown: 3,
-      })
-      .eq("room_id", id);
+async function startGame() {
+  // Kontrollera om roomstate finns
+  const { data: existing } = await supabase
+    .from("roomstate")
+    .select("*")
+    .eq("room_id", id)
+    .single();
 
-    if (!error) {
-      window.location.href = `/poker/${id}/play`;
+  // Om den inte finns → skapa row
+  if (!existing) {
+    console.log("Skapar roomstate (saknades)");
+
+    const { error: insertError } = await supabase
+      .from("roomstate")
+      .insert({
+        room_id: id,
+        community_cards: [],
+        hands: {},
+        has_started: false,
+        countdown: 3,
+      });
+
+    if (insertError && insertError.code !== "23505") {
+      console.error("Kunde inte skapa roomstate:", insertError);
+      return;
     }
   }
+
+  // Uppdatera countdown till 3
+  await supabase
+    .from("roomstate")
+    .update({ countdown: 3, has_started: false })
+    .eq("room_id", id);
+
+  // Gå till spelet
+  window.location.href = `/poker/${id}/play`;
+}
 
   // ---------------------------------------------------------
   // UI
   // ---------------------------------------------------------
-  // If no players are returned yet, show the current profile as a fallback
-  const playersToShow = (players && players.length > 0)
-    ? players
-    : profile && profile.username
-      ? [{ id: userId || "me", name: profile.username }]
-      : [];
   return (
     <div className="poker-page">
       <div className="player-info">
         <strong>{profile?.username}</strong>
-        {isOwner && <span style={{ color: "gold" }}>(Leader)</span>}
+        {isOwner && <span style={{ color: "gold" }}> (Leader)</span>}
       </div>
 
       <h2>♠️ Poker Rum</h2>
 
-      <p>Rum-ID: <strong>{id}</strong></p>
+      <p>
+        Rum-ID: <strong>{id}</strong>
+      </p>
 
       <h3>Spelare i rummet:</h3>
 
       <ul className="player-list">
-        {playersToShow.map((p) => (
+        {players.map((p) => (
           <li key={p.id} className="player-item">
             <span className="player-name">
               {p.name}
@@ -199,7 +293,10 @@ export default function PokerRoom() {
             </span>
 
             {isOwner && String(p.id) !== String(ownerId) && (
-              <button onClick={() => kickPlayer(p.id)} className="remove-player-btn">
+              <button
+                className="remove-player-btn"
+                onClick={() => kickPlayer(p.id)}
+              >
                 ✖
               </button>
             )}
@@ -208,16 +305,18 @@ export default function PokerRoom() {
       </ul>
 
       {isOwner && (
-        <button onClick={startGame} className="start-game-btn">
+        <button className="start-game-btn" onClick={startGame}>
           Starta spel
         </button>
       )}
 
-      <button onClick={leaveRoom} className="leave-btn">
+      <button className="leave-btn" onClick={leaveRoom}>
         Lämna rummet
       </button>
 
-      <Link to="/poker">Tillbaka</Link>
+      <Link to="/poker" className="back-link">
+        Tillbaka
+      </Link>
     </div>
   );
 }
