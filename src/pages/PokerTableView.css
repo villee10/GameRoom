@@ -366,3 +366,38 @@
   color: white;
   font-size: 14px;
 }
+
+
+/* PokerTableView.css */
+
+.countdown-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: rgba(0, 0, 0, 0.85); /* Mörk bakgrund */
+  padding: 40px;
+  border-radius: 15px;
+  display: flex;
+  flex-direction: column; /* Viktigt! Gör att siffran hamnar ovanför texten */
+  align-items: center;
+  justify-content: center;
+  z-index: 1000; /* Se till att den ligger överst */
+  border: 2px solid gold;
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+}
+
+.countdown-number {
+  font-size: 6rem; /* Stor siffra */
+  font-weight: bold;
+  color: gold;
+  line-height: 1;
+  margin-bottom: 10px;
+}
+
+.countdown-overlay p {
+  font-size: 1.5rem;
+  color: white;
+  margin: 0;
+  white-space: nowrap;
+}

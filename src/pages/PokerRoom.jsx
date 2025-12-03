@@ -60,26 +60,26 @@ export default function PokerRoom() {
     if (!data) {
       console.log("Roomstate saknas → Skapar ny...");
 
-        // Använd upsert för att göra operationen idempotent vid dubbel-render
-        const { error } = await supabase
-          .from("roomstate")
-          .upsert(
-            [
-              {
-                room_id: id,
-                community_cards: [],
-                has_started: false,
-                countdown: null,
-                hands: {},
-              },
-            ],
-            { onConflict: "room_id" }
-          )
-          .select();
+      // Använd upsert för att göra operationen idempotent vid dubbel-render
+      const { error } = await supabase
+        .from("roomstate")
+        .upsert(
+          [
+            {
+              room_id: id,
+              community_cards: [],
+              has_started: false,
+              countdown: null,
+              hands: {},
+            },
+          ],
+          { onConflict: "room_id" }
+        )
+        .select();
 
-        if (error) {
-          console.log("Roomstate upsert error (ignored if conflict):", error);
-        }
+      if (error) {
+        console.log("Roomstate upsert error (ignored if conflict):", error);
+      }
     }
   }
 
@@ -118,7 +118,6 @@ export default function PokerRoom() {
     while (usedSeats.includes(seat)) seat++;
 
     // Skapa spelaren
-    // Upsert så att en parallell insert inte ger HTTP 409 / unikhetsfel.
     const { data: upserted, error } = await supabase
       .from("roomplayers")
       .upsert(
@@ -204,10 +203,11 @@ export default function PokerRoom() {
   }, [profile, userId]);
 
   // ---------------------------------------------------------
-  // 📡 Realtid
+  // 📡 Realtid - Lyssna på spelare & navigering
   // ---------------------------------------------------------
   useEffect(() => {
-    const channel = supabase
+    // 1. Lyssna på nya spelare
+    const playersChannel = supabase
       .channel(`room_${id}_players`)
       .on(
         "postgres_changes",
@@ -221,49 +221,62 @@ export default function PokerRoom() {
       )
       .subscribe();
 
-    return () => supabase.removeChannel(channel);
-  }, []);
+    // 2. Lyssna på "Start Game" signal (countdown = 3)
+    const gameChannel = supabase
+      .channel(`room_wait_${id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "roomstate",
+          filter: `room_id=eq.${id}`,
+        },
+        (payload) => {
+          // Om countdown blir 3, gå till bordet!
+          if (payload.new && payload.new.countdown === 3) {
+            console.log("Spelet startar! Navigerar till bordet...");
+            navigate(`/poker/${id}/play`);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(playersChannel);
+      supabase.removeChannel(gameChannel);
+    };
+  }, [id, navigate]); // Viktigt att id och navigate är med här
 
   // ---------------------------------------------------------
-  // ▶️ Starta spelet (ingen countdown här)
+  // ▶️ Starta spelet (Leader Only)
   // ---------------------------------------------------------
-async function startGame() {
-  // Kontrollera om roomstate finns
-  const { data: existing } = await supabase
-    .from("roomstate")
-    .select("*")
-    .eq("room_id", id)
-    .single();
-
-  // Om den inte finns → skapa row
-  if (!existing) {
-    console.log("Skapar roomstate (saknades)");
-
-    const { error: insertError } = await supabase
+  async function startGame() {
+    // Se till att roomstate finns (fallback)
+    const { data: existing } = await supabase
       .from("roomstate")
-      .insert({
+      .select("*")
+      .eq("room_id", id)
+      .single();
+
+    if (!existing) {
+      await supabase.from("roomstate").insert({
         room_id: id,
         community_cards: [],
         hands: {},
         has_started: false,
         countdown: 3,
       });
-
-    if (insertError && insertError.code !== "23505") {
-      console.error("Kunde inte skapa roomstate:", insertError);
-      return;
     }
+
+    // Uppdatera countdown till 3 -> Detta triggar lyssnaren ovan för ALLA
+    await supabase
+      .from("roomstate")
+      .update({ countdown: 3, has_started: false })
+      .eq("room_id", id);
+      
+    // Vi navigerar INTE manuellt här längre. Lyssnaren sköter det.
   }
-
-  // Uppdatera countdown till 3
-  await supabase
-    .from("roomstate")
-    .update({ countdown: 3, has_started: false })
-    .eq("room_id", id);
-
-  // Gå till spelet
-  window.location.href = `/poker/${id}/play`;
-}
 
   // ---------------------------------------------------------
   // UI
