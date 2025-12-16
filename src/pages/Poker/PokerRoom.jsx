@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
-import supabase from "../supabaseClient";
+import supabase from "../../supabaseClient";
 import "./Poker.css";
 import "./PokerRoom.css";
 

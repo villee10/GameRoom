@@ -9,6 +9,7 @@ export default function Home() {
       <p>Välj ett spel:</p>
       <ul style={{ listStyle: "none", padding: 0 }}>
         <li><Link to="/poker">Poker</Link></li>
+        <li><Link to="/Dice">Dice</Link></li>  
       </ul>
       </div>
   );

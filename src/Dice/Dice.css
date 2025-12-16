@@ -1,0 +1,17 @@
+
+
+
+.container{
+    text-align: center;
+    padding: 2rem 2rem;
+    margin: 1rem;
+}
+
+.square{
+    height: 400px;
+    width: 400px;
+    background-color:transparent;
+    display: inline-block;
+    vertical-align: middle;
+    padding: 1rem 1rem;
+}

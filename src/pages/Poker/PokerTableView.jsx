@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
-import supabase from "../supabaseClient";
+import supabase from "../../supabaseClient";
 import "./PokerTableView.css";
-import { createDeck, shuffle, dealHands } from "./Game/pokerLogic";
+import { createDeck, shuffle, dealHands } from "../Game/pokerLogic";
 
 // Positioner runt bordet
 const seatPositions = [
